@@ -36,7 +36,7 @@ var (
 	rolePrefix                    = "splunk-forwarder-operator"
 	testSplunkForwarder           = "osde2e-splunkforwarder-test-2"
 	dedicatedAdminSplunkForwarder = "osde2e-dedicated-admin-splunkforwarder-x"
-	operatorNamespace             = "openshift-splunk-forwarder-operator"
+	operatorNamespace             string // Detected dynamically: openshift-security (PKO) or openshift-splunk-forwarder-operator (OLM)
 	operatorLockFile              = "splunk-forwarder-operator-lock"
 	clusterID                     string
 )
@@ -50,6 +50,19 @@ var _ = ginkgo.Describe("Splunk Forwarder Operator", ginkgo.Ordered, func() {
 		k8s, err = openshift.New(ginkgo.GinkgoLogr)
 		Expect(err).ShouldNot(HaveOccurred(), "unable to setup k8s client")
 		Expect(sfv1alpha1.AddToScheme(k8s.GetScheme())).Should(BeNil(), "unable to register sfv1alpha1 api scheme")
+
+		ginkgo.By("detecting operator namespace (PKO or OLM)")
+		var deployment appsv1.Deployment
+		// Check for PKO deployment in openshift-security
+		err = k8s.Get(ctx, deploymentName, "openshift-security", &deployment)
+		if err == nil {
+			operatorNamespace = "openshift-security"
+			ginkgo.GinkgoLogr.Info("Detected PKO deployment", "namespace", operatorNamespace)
+		} else {
+			// Fall back to OLM namespace
+			operatorNamespace = "openshift-splunk-forwarder-operator"
+			ginkgo.GinkgoLogr.Info("Using OLM namespace", "namespace", operatorNamespace)
+		}
 
 		ginkgo.By("creating test secrets for e2e tests")
 		err = createTestSecrets(ctx, k8s, operatorNamespace)
